@@ -37,13 +37,16 @@ from ludwig.utils.data_utils import read_csv
 from ludwig.utils.data_utils import replace_file_extension
 from ludwig.utils.data_utils import split_dataset_tvt
 from ludwig.utils.data_utils import text_feature_data_field
-from ludwig.utils.defaults import default_preprocessing_parameters
+from ludwig.utils.defaults import default_preprocessing_parameters, \
+    merge_with_defaults
 from ludwig.utils.defaults import default_random_seed
 from ludwig.utils.misc import get_from_registry
 from ludwig.utils.misc import merge_dict
 from ludwig.utils.misc import set_random_seed
 
 logger = logging.getLogger(__name__)
+
+DATA_TRAIN_HDF5_FP = 'data_train_hdf5_fp'
 
 
 def build_dataset(
@@ -244,19 +247,19 @@ def load_data(
     for input_feature in input_features:
         if input_feature['type'] == TEXT:
             text_data_field = text_feature_data_field(input_feature)
-            dataset[text_data_field] = hdf5_data[text_data_field].value
+            dataset[text_data_field] = hdf5_data[text_data_field][()]
         else:
             dataset[input_feature['name']] = hdf5_data[
                 input_feature['name']
-            ].value
+            ][()]
     for output_feature in output_features:
         if output_feature['type'] == TEXT:
             dataset[text_feature_data_field(output_feature)] = hdf5_data[
                 text_feature_data_field(output_feature)
-            ].value
+            ][()]
         else:
             dataset[output_feature['name']] = hdf5_data[
-                output_feature['name']].value
+                output_feature['name']][()]
         if 'limit' in output_feature:
             dataset[output_feature['name']] = collapse_rare_labels(
                 dataset[output_feature['name']],
@@ -267,7 +270,7 @@ def load_data(
         hdf5_data.close()
         return dataset
 
-    split = hdf5_data['split'].value
+    split = hdf5_data['split'][()]
     hdf5_data.close()
     training_set, test_set, validation_set = split_dataset_tvt(dataset, split)
 
@@ -354,22 +357,21 @@ def preprocess_for_training(
 
 
 def preprocess_for_training_by_type(
-    model_definition,
-    data_type,
-    all_data_fp=None,
-    train_fp=None,
-    validation_fp=None,
-    test_fp=None,
-    all_data_df=None,
-    train_df=None,
-    validation_df=None,
-    test_df=None,
-    train_set_metadata_json=None,
-    skip_save_processed_input=False,
-    preprocessing_params=default_preprocessing_parameters,
-    random_seed=default_random_seed
+        model_definition,
+        data_type,
+        all_data_fp=None,
+        train_fp=None,
+        validation_fp=None,
+        test_fp=None,
+        all_data_df=None,
+        train_df=None,
+        validation_df=None,
+        test_df=None,
+        train_set_metadata_json=None,
+        skip_save_processed_input=False,
+        preprocessing_params=default_preprocessing_parameters,
+        random_seed=default_random_seed
 ):
-
     if all_data_fp is not None and train_fp is not None:
         raise ValueError('Use either one file for all data or 3 files for '
                          'train, test and validation')
@@ -400,8 +402,8 @@ def preprocess_for_training_by_type(
             random_seed=random_seed
         )
     elif data_type == 'hdf5' and train_set_metadata_json is None:
-        raise ValueError('train set metadata file is not found along with hdf5 '
-                         'data')
+        raise ValueError('train set metadata file is not found along with hdf5'
+                         ' data')
     elif data_type == 'hdf5':
         if all_data_fp is not None:
             data_hdf5_fp = replace_file_extension(all_data_fp, 'hdf5')
@@ -495,20 +497,25 @@ def preprocess_for_training_by_type(
                     model_definition,
                     'hdf5',
                     train_fp=replace_file_extension(train_fp, 'hdf5'),
-                    validation_fp=replace_file_extension(validation_fp, 'hdf5'),
+                    validation_fp=replace_file_extension(
+                        validation_fp,
+                        'hdf5'
+                    ),
                     test_fp=replace_file_extension(test_fp, 'hdf5'),
-                    train_set_metadata_json=replace_file_extension(all_data_fp,
-                                                                   'json'),
+                    train_set_metadata_json=replace_file_extension(
+                        train_fp,
+                        'json'
+                    ),
                     skip_save_processed_input=skip_save_processed_input,
                     preprocessing_params=preprocessing_params,
                     random_seed=random_seed
                 )
             else:
                 (
-                   training_set,
-                   test_set,
-                   validation_set,
-                   train_set_metadata
+                    training_set,
+                    test_set,
+                    validation_set,
+                    train_set_metadata
                 ) = _preprocess_csv_for_training(
                     features=features,
                     data_csv=None,
@@ -533,7 +540,7 @@ def preprocess_for_training_by_type(
         training_set,
         model_definition['input_features'],
         model_definition['output_features'],
-        data_hdf5_fp
+        train_set_metadata.get(DATA_TRAIN_HDF5_FP)
     )
 
     validation_dataset = None
@@ -542,7 +549,7 @@ def preprocess_for_training_by_type(
             validation_set,
             model_definition['input_features'],
             model_definition['output_features'],
-            data_hdf5_fp
+            train_set_metadata.get(DATA_TRAIN_HDF5_FP)
         )
 
     test_dataset = None
@@ -551,7 +558,7 @@ def preprocess_for_training_by_type(
             test_set,
             model_definition['input_features'],
             model_definition['output_features'],
-            data_hdf5_fp
+            train_set_metadata.get(DATA_TRAIN_HDF5_FP)
         )
 
     return (
@@ -610,6 +617,7 @@ def _preprocess_csv_for_training(
             logger.info('Writing dataset')
             data_hdf5_fp = replace_file_extension(data_csv, 'hdf5')
             data_utils.save_hdf5(data_hdf5_fp, data, train_set_metadata)
+            train_set_metadata[DATA_TRAIN_HDF5_FP] = data_hdf5_fp
             logger.info('Writing train set metadata with vocabulary')
 
             train_set_metadata_json_fp = replace_file_extension(
@@ -658,6 +666,7 @@ def _preprocess_csv_for_training(
                 training_set,
                 train_set_metadata
             )
+            train_set_metadata[DATA_TRAIN_HDF5_FP] = data_train_hdf5_fp
             if validation_set is not None:
                 data_validation_hdf5_fp = replace_file_extension(
                     data_validation_csv,
@@ -668,6 +677,8 @@ def _preprocess_csv_for_training(
                     validation_set,
                     train_set_metadata
                 )
+                train_set_metadata[DATA_TRAIN_HDF5_FP] = data_train_hdf5_fp
+
             if test_set is not None:
                 data_test_hdf5_fp = replace_file_extension(data_test_csv,
                                                            'hdf5')
@@ -676,10 +687,15 @@ def _preprocess_csv_for_training(
                     test_set,
                     train_set_metadata
                 )
+                train_set_metadata[DATA_TRAIN_HDF5_FP] = data_train_hdf5_fp
+
             logger.info('Writing train set metadata with vocabulary')
             train_set_metadata_json_fp = replace_file_extension(data_train_csv,
                                                                 'json')
-            data_utils.save_json(train_set_metadata_json_fp, train_set_metadata)
+            data_utils.save_json(
+                train_set_metadata_json_fp,
+                train_set_metadata,
+            )
 
     return training_set, test_set, validation_set, train_set_metadata
 
@@ -832,7 +848,7 @@ def preprocess_for_prediction(
         dataset,
         model_definition['input_features'],
         output_features,
-        data_hdf5_fp,
+        train_set_metadata.get(DATA_TRAIN_HDF5_FP)
     )
 
     return dataset, train_set_metadata
@@ -855,6 +871,38 @@ def replace_text_feature_level(features, datasets):
                             level)
                         if name_level in dataset:
                             del dataset[name_level]
+
+
+def get_preprocessing_params(model_definition):
+    model_definition = merge_with_defaults(model_definition)
+
+    global_preprocessing_parameters = model_definition['preprocessing']
+    features = (
+            model_definition['input_features'] +
+            model_definition['output_features']
+    )
+
+    global_preprocessing_parameters = merge_dict(
+        default_preprocessing_parameters,
+        global_preprocessing_parameters
+    )
+
+    merged_preprocessing_params = []
+    for feature in features:
+        if 'preprocessing' in feature:
+            local_preprocessing_parameters = merge_dict(
+                global_preprocessing_parameters[feature['type']],
+                feature['preprocessing']
+            )
+        else:
+            local_preprocessing_parameters = global_preprocessing_parameters[
+                feature['type']
+            ]
+        merged_preprocessing_params.append(
+            (feature['name'], feature['type'], local_preprocessing_parameters)
+        )
+
+    return merged_preprocessing_params
 
 
 if __name__ == '__main__':
