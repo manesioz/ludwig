@@ -257,9 +257,6 @@ You can specify an output directory with the argument `--output-directory`, by d
 
 The directory will contain a prediction CSV file and a probability CSV file for each output feature, together with raw NPY files containing raw tensors.
 You can specify not to save the raw NPY output files with the argument `skip_save_unprocessed_output`.
-If the argument `--evaluate_performance` if provided, a `predict_statistics.json` file containing all prediction statistics will also be outputted.
-If this parameter is specified, the data must contain columns for each output feature with ground truth output values in order to compute the performance statistics.
-If you receive an error regarding a missing output feature column in your data, it means that the data does not contain the columns for each output feature to use as ground truth.
 
 A specific batch size for speeding up the prediction can be specified using the argument `--batch_size`.
 
@@ -332,6 +329,9 @@ optional arguments:
 All parameters are the same of [predict](#predict) and the behavior is the same.
 The only difference isthat `test` requires the dataset to contain also columns with the same name of output features.
 This is needed because `test` compares the predictions produced by the model with the ground truth and will save all those statistics in a `test_statistics.json` file in the result directory.
+
+Note that the data must contain columns for each output feature with ground truth output values in order to compute the performance statistics.
+If you receive an error regarding a missing output feature column in your data, it means that the data does not contain the columns for each output feature to use as ground truth.
 
 Example:
 ```
@@ -1947,7 +1947,7 @@ reduce_output: last
 #### BERT Encoder
 
 The [BERT](https://arxiv.org/abs/1810.04805) encoder allows for loading a pre-trained bert model.
-Models are available on [GitHube](https://github.com/google-research/bert) for download.
+Models are available on [GitHub](https://github.com/google-research/bert) for download.
 The downloaded pretrained model directory contains:
 - `bert_config.json` which holds the hyperparameters of the bert architecture,
 - `vocab.txt` which contains the vocabulary of BPE word pieces the model was trained on,
@@ -2347,6 +2347,7 @@ All images in the dataset should have the same size.
 If they have different sizes, a `resize_method`, together with a target `width` and `height`, must be specified in the feature preprocessing parameters.
 
 - `in_memory` (default `true`): defines whether image dataset will reside in memory during the training process or will be dynamically fetched from disk (useful for large datasets). In the latter case a training batch of input images will be fetched from disk each training iteration.
+- `num_processes` (default 1): specifies the number of processes to run for preprocessing images.
 - `resize_method` (default `crop_or_pad`): available options: `crop_or_pad` - crops images larger than the specified `width` and `height` to the desired size or pads smalled images using edge padding; `interpolate` - uses interpolation to resize images to the specified `width` and `height`.
 - `height` (default `null`): image height in pixels, must be set if resizing is required
 - `width` (default `null`): image width in pixels, must be set if resizing is required
